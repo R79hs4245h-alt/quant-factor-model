@@ -1410,15 +1410,172 @@ def _compute_forward_returns_simple(panel, rb_date, next_rb):
         return None
 
 
+def run_etf_recommend(etf_data_path: str = None, lof_data_path: str = None):
+    """
+    v7.2: 场内基金(ETF+LOF)推荐
+
+    仅推荐场内基金,不再推荐场外基金。
+    支持从浏览器抓取的数据加载(当akshare网络不可用时)。
+    """
+    print("\n" + "=" * 70)
+    print("  场内基金(ETF+LOF)推荐引擎 v7.2")
+    print("  仅推荐场内基金 — 不推荐任何场外基金")
+    print("=" * 70)
+
+    from etf_recommender import ExchangeTradedFundRecommender
+
+    recommender = ExchangeTradedFundRecommender()
+
+    # 加载数据
+    etf_browser_json = None
+    lof_browser_json = None
+
+    if etf_data_path:
+        try:
+            with open(etf_data_path, 'r', encoding='utf-8') as f:
+                etf_browser_json = f.read()
+            print(f"  加载ETF数据: {etf_data_path}")
+        except Exception as e:
+            print(f"  加载ETF数据失败: {e}")
+
+    if lof_data_path:
+        try:
+            with open(lof_data_path, 'r', encoding='utf-8') as f:
+                lof_browser_json = f.read()
+            print(f"  加载LOF数据: {lof_data_path}")
+        except Exception as e:
+            print(f"  加载LOF数据失败: {e}")
+
+    # 运行推荐
+    result = recommender.run(
+        etf_browser_data=etf_browser_json,
+        lof_browser_data=lof_browser_json,
+    )
+
+    # 打印结果
+    if result.get('error'):
+        print(f"\n  错误: {result['error']}")
+        return
+
+    print(f"\n  数据统计:")
+    print(f"    ETF总数: {result.get('total_etf', 0)}")
+    print(f"    LOF总数: {result.get('total_lof', 0)}")
+    print(f"    合并总数: {result.get('total_funds', 0)}")
+    print(f"    流动性筛选后: {result.get('total_filtered', 0)}")
+
+    recs = result.get('recommendations', [])
+    print(f"\n  推荐场内基金: {len(recs)} 只")
+
+    # 主题分析
+    theme_analysis = result.get('theme_analysis', {})
+    if theme_analysis:
+        print(f"\n  主题轮动分析:")
+        print(f"    最强主题: {theme_analysis.get('top_theme', 'N/A')}")
+        strong = theme_analysis.get('strong_themes', [])
+        if strong:
+            print(f"    强势主题: {', '.join(t['theme'] for t in strong)}")
+
+    # 推荐列表
+    print(f"\n  {'代码':<8} {'名称':<20} {'类型':<5} {'主题':<10} {'价格':<8} {'涨跌幅':<8} {'成交额':<10} {'信号':<6} {'风险':<4}")
+    print(f"  {'-'*8} {'-'*20} {'-'*5} {'-'*10} {'-'*8} {'-'*8} {'-'*10} {'-'*6} {'-'*4}")
+    for rec in recs:
+        name = rec.get('name', '')[:18]
+        print(f"  {rec.get('code', ''):<8} {name:<20} {rec.get('fund_type', ''):<5} "
+              f"{rec.get('theme', ''):<10} {rec.get('price', 0):<8.3f} "
+              f"{rec.get('change_pct', 0):>+7.2f}% {str(rec.get('amount_str', '')):<10} "
+              f"{rec.get('signal', ''):<6} {rec.get('risk_level', ''):<4}")
+
+    # 保存路径
+    report_path = recommender.save_report()
+    print(f"\n  报告已保存: {report_path}")
+    print("=" * 70)
+
+
+def run_four_dim_analysis(code: str = None):
+    """
+    v7.3: 四维高阶选股分析
+
+    对单只标的执行四维分析:
+      维度一: 估值相对合理 (PEG/历史分位/市值空间)
+      维度二: 触底反弹拐点确认 (底背离/金针探底/倍量阳)
+      维度三: 主力资金真流入 (DDX/大单/龙虎榜)
+      维度四: 主升浪启动检测 (均线粘合/量能递增/筹码峰)
+    """
+    print("\n" + "=" * 70)
+    print("  四维高阶选股分析 v7.3")
+    print("  估值合理 | 拐点确认 | 资金流入 | 主升浪启动")
+    print("=" * 70)
+
+    if code is None:
+        print("  请通过 --four-dim-code 指定股票/基金代码")
+        print("  示例: python main.py --mode four-dim --four-dim-code 512690")
+        return
+
+    from advanced_factors import FourDimensionEngine
+
+    engine = FourDimensionEngine()
+
+    # 尝试获取K线数据
+    ohlc = None
+    try:
+        from data_loader import get_realtime_quotes
+        quotes = get_realtime_quotes([code])
+        if quotes is not None and len(quotes) > 0:
+            q = quotes.iloc[0]
+            ohlc = pd.DataFrame([{
+                'open': float(q.get('open', 0) or 0),
+                'high': float(q.get('high', 0) or 0),
+                'low': float(q.get('low', 0) or 0),
+                'close': float(q.get('price', 0) or 0),
+                'volume': float(q.get('volume', 0) or 0),
+            }])
+            print(f"  标的: {code}")
+            print(f"  价格: {q.get('price', 'N/A')}")
+        else:
+            print(f"  未获取到 {code} 行情数据,使用空数据分析")
+    except Exception as e:
+        print(f"  获取行情数据失败: {e}, 使用空数据分析")
+
+    # 执行四维分析
+    result = engine.analyze(ohlc=ohlc)
+
+    print(f"\n  ===== 四维分析结果 =====")
+    print(f"  总分: {result['total_score']}")
+    print(f"  信号: {result['signal']}")
+    print(f"  共振: {result['resonance']}维 ({result['resonance_level']})")
+    print(f"  触发维度: {', '.join(result['resonance_dims']) if result['resonance_dims'] else '无'}")
+
+    print(f"\n  --- 维度详情 ---")
+    val = result.get('valuation', {})
+    br = result.get('bottom_reversal', {})
+    cf = result.get('capital_flow', {})
+    mr = result.get('main_rally', {})
+
+    print(f"  估值 ({val.get('score', 0)}): {val.get('details', '')}")
+    print(f"  拐点 ({br.get('score', 0)}): {br.get('details', '')}")
+    print(f"  资金 ({cf.get('score', 0)}): {cf.get('details', '')}")
+    print(f"  主升 ({mr.get('score', 0)}): {mr.get('details', '')}")
+
+    print(f"\n  --- 操作建议 ---")
+    print(f"  {result.get('action', '')}")
+
+    print(f"\n  --- 止损纪律 ---")
+    print(f"  {result.get('stop_loss_rule', '')}")
+
+    print("=" * 70)
+
+
 def main():
-    parser = argparse.ArgumentParser(description="多因子选股量化框架 v7.1")
+    parser = argparse.ArgumentParser(description="多因子选股量化框架 v7.3 (四维高阶选股)")
     parser.add_argument("--mode", choices=["backtest", "backtest-ml", "backtest-v7",
                                            "backtest-v71",
                                            "screen", "recommend", "recommend-v7",
                                            "recommend-v71",
+                                           "recommend-etf",
+                                           "four-dim",
                                            "market", "regime", "risk", "mine", "tune",
                                            "factor-eval", "predict-eval", "all"],
-                       default="backtest-v71", help="运行模式")
+                       default="recommend-etf", help="运行模式(默认: 场内基金推荐)")
     parser.add_argument("--codes", type=str, default=None,
                        help="指定股票池(逗号分隔)")
     parser.add_argument("--start", type=str, default=None, help="回测起始日期")
@@ -1428,6 +1585,12 @@ def main():
     parser.add_argument("--ml", action="store_true", help="启用ML因子合成")
     parser.add_argument("--no-regime", action="store_true", help="禁用市场状态检测")
     parser.add_argument("--no-risk", action="store_true", help="禁用高级风控")
+    parser.add_argument("--etf-data", type=str, default=None,
+                       help="浏览器抓取的ETF数据JSON文件路径(akshare不可用时使用)")
+    parser.add_argument("--lof-data", type=str, default=None,
+                       help="浏览器抓取的LOF数据JSON文件路径(akshare不可用时使用)")
+    parser.add_argument("--four-dim-code", type=str, default=None,
+                       help="四维分析: 指定单个股票/基金代码进行分析")
     args = parser.parse_args()
 
     codes = args.codes.split(",") if args.codes else None
@@ -1479,6 +1642,12 @@ def main():
 
     elif args.mode == "predict-eval":
         run_prediction_evaluation(codes)
+
+    elif args.mode == "recommend-etf":
+        run_etf_recommend(args.etf_data, args.lof_data)
+
+    elif args.mode == "four-dim":
+        run_four_dim_analysis(args.four_dim_code)
 
     elif args.mode == "all":
         run_backtest(codes, args.start, args.end, use_ml=args.ml)
