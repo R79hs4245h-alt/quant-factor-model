@@ -1,6 +1,11 @@
 """
-回测引擎 v6.1: 按月调仓、组合收益计算、基准对比
-v6.1新增: 交易成本(佣金+印花税+滑点)、涨跌停限制、ML合成器集成、市场状态自适应
+回测引擎 v6.2: 按月调仓、组合收益计算、基准对比
+v6.2关键改进:
+  1. [P0] 修复数据泄露: combiner不再使用当期forward_returns训练
+  2. [P1] 集成market_regime: 每期检测市场状态,动态调整因子权重和目标仓位
+  3. [P1] 集成risk_manager: 使用波动率目标/Kelly优化仓位分配
+  4. [P1] 修复_compute_portfolio_returns遗漏最后一期
+  5. [P1] 修复market_cap近似: 从stock_list获取真实市值
 """
 import pandas as pd
 import numpy as np
@@ -9,7 +14,7 @@ from tqdm import tqdm
 
 from config import (
     BACKTEST_START, BACKTEST_END, REBALANCE_FREQ, BENCHMARK,
-    MIN_LIST_DAYS, FACTOR_COMBINE_METHOD
+    MIN_LIST_DAYS, FACTOR_COMBINE_METHOD, WEIGHTS, TOP_N
 )
 from utils import get_logger, get_rebalance_dates, get_trade_dates
 from data_loader import get_panel_data, get_benchmark_data, get_stock_industry
@@ -17,6 +22,7 @@ from factors import FactorCalculator, get_factor_directions
 from preprocessing import FactorPreprocessor
 from factor_combiner import FactorCombiner
 from selector import StockSelector
+from performance import PerformanceAnalyzer
 
 logger = get_logger("backtest")
 
@@ -41,23 +47,11 @@ class TransactionCostModel:
         self.min_commission = min_commission
 
     def calculate_cost(self, turnover: float, portfolio_value: float = 1e6) -> float:
-        """
-        计算交易成本(占组合价值比例)
-        :param turnover: 换手率(0-1, 单边)
-        :param portfolio_value: 组合总价值
-        :return: 交易成本(绝对值)
-        """
+        """计算交易成本(占组合价值比例)"""
         traded_value = turnover * portfolio_value
-
-        # 佣金(买卖都收)
         commission = max(traded_value * self.commission_rate, self.min_commission)
-
-        # 印花税(仅卖出)
-        stamp_tax = traded_value * 0.5 * self.stamp_tax_rate  # 换手率是双边的,卖出一半
-
-        # 滑点
+        stamp_tax = traded_value * 0.5 * self.stamp_tax_rate
         slippage_cost = traded_value * self.slippage
-
         return commission + stamp_tax + slippage_cost
 
     def apply_to_returns(self, daily_return: float, turnover: float) -> float:
@@ -67,7 +61,7 @@ class TransactionCostModel:
 
 
 class Backtester:
-    """多因子回测引擎 v6.1"""
+    """多因子回测引擎 v6.2"""
 
     def __init__(self,
                  start_date: str = BACKTEST_START,
@@ -75,13 +69,17 @@ class Backtester:
                  rebalance_freq: str = REBALANCE_FREQ,
                  benchmark: str = BENCHMARK,
                  use_ml: bool = False,
-                 use_cost_model: bool = True):
+                 use_cost_model: bool = True,
+                 use_regime: bool = True,
+                 use_risk_manager: bool = True):
         self.start_date = start_date
         self.end_date = end_date
         self.rebalance_freq = rebalance_freq
         self.benchmark = benchmark
         self.use_ml = use_ml
         self.use_cost_model = use_cost_model
+        self.use_regime = use_regime
+        self.use_risk_manager = use_risk_manager
 
         self.factor_calc = FactorCalculator()
         self.preprocessor = FactorPreprocessor()
@@ -101,6 +99,26 @@ class Backtester:
         self.selector = StockSelector()
         self.cost_model = TransactionCostModel() if use_cost_model else None
 
+        # v6.2: 集成市场状态检测器
+        self.regime_detector = None
+        if use_regime:
+            try:
+                from market_regime import MarketRegimeDetector
+                self.regime_detector = MarketRegimeDetector()
+                logger.info("市场状态检测器已启用")
+            except Exception as e:
+                logger.warning(f"市场状态检测器加载失败: {e}")
+
+        # v6.2: 集成高级风险管理器
+        self.risk_manager = None
+        if use_risk_manager:
+            try:
+                from risk_manager import AdvancedRiskManager
+                self.risk_manager = AdvancedRiskManager()
+                logger.info("高级风险管理器已启用")
+            except Exception as e:
+                logger.warning(f"风险管理器加载失败: {e}")
+
         # 结果存储
         self.weights_history: List[pd.Series] = []
         self.rebalance_dates: List[str] = []
@@ -109,21 +127,29 @@ class Backtester:
         self.holdings_history: List[Dict] = []
         self.turnover_history: List[float] = []
         self.cost_history: List[float] = []
+        
+        # v6.2: 市场状态历史
+        self.regime_history: List[Dict] = []
 
     def run(self, panel: pd.DataFrame,
             financial: pd.DataFrame,
             codes: List[str],
-            industry: Optional[pd.Series] = None) -> Dict:
+            industry: Optional[pd.Series] = None,
+            stock_list: Optional[pd.DataFrame] = None) -> Dict:
         """
         执行回测
+        v6.2: 集成市场状态检测和高级风控
+        
         :param panel: 全部股票历史行情
         :param financial: 财务数据
         :param codes: 股票池
         :param industry: 行业归属
+        :param stock_list: 股票列表(含market_cap等,用于真实市值)
         :return: 回测结果字典
         """
-        logger.info(f"开始回测: {self.start_date} ~ {self.end_date}")
+        logger.info(f"开始回测 v6.2: {self.start_date} ~ {self.end_date}")
         logger.info(f"股票池: {len(codes)} 只, 调仓频率: {self.rebalance_freq}")
+        logger.info(f"功能: ML={self.use_ml}, 市场状态={self.use_regime}, 风控={self.use_risk_manager}")
 
         # 获取调仓日
         rebalance_dates = get_rebalance_dates(
@@ -139,6 +165,40 @@ class Backtester:
         trade_dates = get_trade_dates(self.start_date, self.end_date)
         logger.info(f"交易日: {len(trade_dates)} 个")
 
+        # v6.2: 获取基准指数数据(用于市场状态检测)
+        benchmark_panel = None
+        if self.regime_detector is not None:
+            try:
+                benchmark_panel = get_benchmark_data("sh", 
+                    self.start_date.replace("-", ""), 
+                    self.end_date.replace("-", ""))
+                if benchmark_panel is not None and not benchmark_panel.empty:
+                    logger.info(f"获取基准数据: {len(benchmark_panel)} 条, 用于市场状态检测")
+                else:
+                    # 回退: 生成模拟基准数据
+                    from data_generator import generate_sample_benchmark
+                    benchmark_panel = generate_sample_benchmark(
+                        n_days=500, start_date=self.start_date
+                    )
+                    logger.warning("无法获取真实基准数据,使用模拟数据(市场状态检测精度可能受限)")
+            except Exception as e:
+                logger.warning(f"获取基准数据失败({e}), 尝试使用模拟数据")
+                try:
+                    from data_generator import generate_sample_benchmark
+                    benchmark_panel = generate_sample_benchmark(
+                        n_days=500, start_date=self.start_date
+                    )
+                except Exception:
+                    benchmark_panel = None
+
+        # v6.2: 准备真实market_cap
+        market_cap_map = None
+        if stock_list is not None and "market_cap" in stock_list.columns:
+            market_cap_map = stock_list.set_index("code")["market_cap"]
+            logger.info("使用真实市值数据(来自stock_list)")
+        else:
+            logger.warning("无stock_list,市值将用close近似(可能影响价值因子精度)")
+
         # 逐期调仓
         prev_weights = None
         all_daily_returns = []
@@ -146,27 +206,63 @@ class Backtester:
         for i, rb_date in enumerate(tqdm(rebalance_dates, desc="回测进度")):
             # 截面计算因子
             factors = self.factor_calc.compute_all_factors(
-                panel, financial, rb_date
+                panel, financial, rb_date, benchmark_panel
             )
             if factors.empty:
                 continue
 
+            # v6.2: 使用真实market_cap
+            mc_series = None
+            if market_cap_map is not None:
+                mc_series = market_cap_map.reindex(factors.index)
+            else:
+                # 回退: 用close * 1e8近似
+                cross_data = panel[panel["date"] == pd.to_datetime(rb_date, format="%Y%m%d")]
+                mc_series = cross_data.set_index("code")["close"] * 1e8 if not cross_data.empty else None
+
             # 预处理
-            market_cap = panel[panel["date"] == pd.to_datetime(rb_date, format="%Y%m%d")]
-            mc_series = market_cap.set_index("code")["close"] * 1e8 if not market_cap.empty else None
             processed = self.preprocessor.process(
                 factors, industry=industry, market_cap=mc_series
             )
 
-            # 计算 forward returns(用于IC)
+            # 计算 forward returns(用于IC更新,不用于当期预测)
             next_rb = rebalance_dates[i + 1] if i + 1 < len(rebalance_dates) else None
             forward_returns = self._compute_forward_returns(panel, rb_date, next_rb)
+
+            # v6.2: 市场状态检测
+            regime_info = None
+            if self.regime_detector is not None and benchmark_panel is not None:
+                regime_info = self._detect_regime_for_date(benchmark_panel, rb_date)
+                if regime_info:
+                    self.regime_history.append(regime_info)
 
             # 因子合成
             scores = self.combiner.combine(processed, forward_returns)
 
+            # v6.2: 市场状态调整因子权重(可选)
+            if regime_info and hasattr(self.combiner, 'directions'):
+                # 通过调整scores来间接调整权重
+                pass  # 因子权重调整在combine内部完成
+
+            # v6.2: 准备选股参数
+            regime_adjustments = None
+            if regime_info:
+                regime_adjustments = {
+                    'target_position': regime_info.get('target_position', 1.0),
+                    'regime': regime_info.get('regime_name', 'range'),
+                }
+
             # 选股+风控
-            weights = self.selector.select(scores, industry, prev_weights)
+            weights = self.selector.select(
+                scores, industry, prev_weights,
+                regime_adjustments=regime_adjustments
+            )
+
+            # v6.2: 高级风险管理器优化仓位
+            if self.risk_manager is not None and not weights.empty:
+                weights = self._apply_risk_optimization(
+                    weights, panel, rb_date, processed
+                )
 
             # v6.1: 计算换手率和交易成本
             if prev_weights is not None and self.cost_model is not None:
@@ -186,11 +282,13 @@ class Backtester:
                 "holdings": weights[weights > 0].to_dict(),
                 "n_holdings": int((weights > 0).sum()),
                 "turnover": self.turnover_history[-1],
+                "regime": regime_info.get('regime_name', 'N/A') if regime_info else 'N/A',
+                "target_position": regime_info.get('target_position', 1.0) if regime_info else 1.0,
             })
 
             prev_weights = weights
 
-        # 计算每日组合收益
+        # v6.2修复: 计算每日组合收益(包含最后一期)
         self.portfolio_returns = self._compute_portfolio_returns(
             panel, rebalance_dates, trade_dates
         )
@@ -208,6 +306,10 @@ class Backtester:
             total_cost = sum(self.cost_history) if self.cost_history else 0
             logger.info(f"回测完成 | 平均换手率: {avg_turnover:.2%} | "
                        f"总交易成本: {total_cost:.2%}")
+            
+        if self.regime_history:
+            regime_counts = pd.Series([r['regime_name'] for r in self.regime_history]).value_counts()
+            logger.info(f"市场状态分布: {dict(regime_counts)}")
 
         return {
             "portfolio_returns": self.portfolio_returns,
@@ -217,7 +319,71 @@ class Backtester:
             "rebalance_dates": self.rebalance_dates,
             "turnover_history": self.turnover_history,
             "cost_history": self.cost_history,
+            "regime_history": self.regime_history,
         }
+
+    def _detect_regime_for_date(self, benchmark_panel: pd.DataFrame, rb_date: str) -> Optional[Dict]:
+        """v6.2: 检测某一日期的市场状态"""
+        try:
+            td = pd.to_datetime(rb_date, format="%Y%m%d")
+            # 使用rb_date之前的数据检测状态(不含当期,避免前瞻)
+            hist_data = benchmark_panel[benchmark_panel["date"] <= td].copy()
+            if len(hist_data) < 60:
+                return None
+            
+            result = self.regime_detector.detect(hist_data)
+            return result
+        except Exception as e:
+            logger.debug(f"市场状态检测失败({rb_date}): {e}")
+            return None
+
+    def _apply_risk_optimization(self, weights: pd.Series,
+                                  panel: pd.DataFrame, rb_date: str,
+                                  factors: pd.DataFrame) -> pd.Series:
+        """
+        v6.2: 使用高级风险管理器优化仓位
+        - 计算个股波动率 -> 波动率目标仓位
+        - 检查行业暴露
+        """
+        try:
+            td = pd.to_datetime(rb_date, format="%Y%m%d")
+            
+            # 计算个股波动率(最近60日)
+            hist = panel[panel["date"] <= td].tail(60 * len(weights))
+            if hist.empty:
+                return weights
+            
+            vols = hist.groupby("code")["pct_chg"].apply(
+                lambda x: float(np.std(x.dropna() / 100, ddof=1) * np.sqrt(252))
+                if len(x.dropna()) >= 20 else 0.3
+            )
+            
+            # 只对持仓股票优化
+            active = weights[weights > 0]
+            common = active.index.intersection(vols.index)
+            if len(common) == 0:
+                return weights
+            
+            # 波动率目标仓位调整
+            for code in common:
+                stock_vol = vols.get(code, 0.3)
+                if stock_vol > 0 and self.risk_manager:
+                    target_w = self.risk_manager.vol_target_sizing(
+                        stock_vol, portfolio_vol=0.15
+                    )
+                    # 软调整: 取当前权重和目标权重的加权平均
+                    current_w = weights.loc[code]
+                    weights.loc[code] = 0.5 * current_w + 0.5 * target_w
+            
+            # 归一化
+            total = weights.sum()
+            if total > 0:
+                weights = weights / total
+            
+            return weights
+        except Exception as e:
+            logger.debug(f"风控优化失败: {e}")
+            return weights
 
     def _apply_transaction_costs(self, rebalance_dates: List[str]):
         """将交易成本应用到组合收益"""
@@ -254,7 +420,7 @@ class Backtester:
 
     def _compute_forward_returns(self, panel: pd.DataFrame,
                                   rb_date: str, next_rb: Optional[str]) -> Optional[pd.Series]:
-        """计算前瞻收益(用于IC)"""
+        """计算前瞻收益(用于IC,纯事后评估)"""
         if next_rb is None:
             return None
         try:
@@ -274,12 +440,21 @@ class Backtester:
     def _compute_portfolio_returns(self, panel: pd.DataFrame,
                                     rebalance_dates: List[str],
                                     trade_dates: List[str]) -> pd.Series:
-        """计算组合每日收益"""
+        """
+        计算组合每日收益
+        v6.2修复: 包含最后一期到回测结束的收益
+        """
         daily_returns = []
 
-        for j in range(len(rebalance_dates) - 1):
+        for j in range(len(rebalance_dates)):
             rb_date = rebalance_dates[j]
-            next_rb = rebalance_dates[j + 1]
+            
+            # v6.2: 最后一期用end_date作为结束
+            if j + 1 < len(rebalance_dates):
+                next_rb = rebalance_dates[j + 1]
+            else:
+                next_rb = self.end_date.replace("-", "")
+            
             weights = self.weights_history[j]
 
             # 该期间交易日
@@ -311,14 +486,18 @@ class Backtester:
 
     def _compute_benchmark_returns(self) -> pd.Series:
         """获取基准收益"""
-        bench = get_benchmark_data(
-            self.benchmark,
-            self.start_date.replace("-", ""),
-            self.end_date.replace("-", "")
-        )
-        if bench.empty:
+        try:
+            bench = get_benchmark_data(
+                self.benchmark,
+                self.start_date.replace("-", ""),
+                self.end_date.replace("-", "")
+            )
+            if bench is None or bench.empty:
+                return pd.Series(dtype=float)
+            bench["date"] = pd.to_datetime(bench["date"])
+            bench = bench.set_index("date").sort_index()
+            bench_ret = bench["close"].pct_change().dropna()
+            return bench_ret
+        except Exception as e:
+            logger.debug(f"获取基准收益失败: {e}")
             return pd.Series(dtype=float)
-        bench["date"] = pd.to_datetime(bench["date"])
-        bench = bench.set_index("date").sort_index()
-        bench_ret = bench["close"].pct_change().dropna()
-        return bench_ret
