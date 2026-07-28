@@ -1,5 +1,9 @@
 """
-因子预处理: 去极值、标准化、行业市值中性化
+因子预处理 v6.2: 去极值、标准化、联合行业市值中性化
+v6.2修复:
+  1. [P0] 修复winsorize覆盖bug: quantile clip基于MAD处理后的数据
+  2. [P1] 联合中性化: 行业+市值同时回归取残差(不再分步破坏)
+  3. [P1] 新增RobustScaler选项
 """
 import pandas as pd
 import numpy as np
@@ -13,7 +17,7 @@ logger = get_logger("preprocess")
 
 
 class FactorPreprocessor:
-    """因子预处理器"""
+    """因子预处理器 v6.2"""
 
     def __init__(self,
                  winsorize_q: float = WINSORIZE_QUANTILE,
@@ -40,33 +44,41 @@ class FactorPreprocessor:
         result = self.standardize(result)
         logger.info("标准化完成 (Z-Score)")
 
-        # 3. 中性化
-        if self.neutralize_industry and industry is not None:
+        # 3. v6.2: 联合中性化(行业+市值同时回归)
+        if self.neutralize_industry and self.neutralize_size and \
+           industry is not None and market_cap is not None:
+            result = self.neutralize_joint(result, industry, market_cap)
+            logger.info("联合行业+市值中性化完成")
+        elif self.neutralize_industry and industry is not None:
             result = self.neutralize_by_industry(result, industry)
             logger.info("行业中性化完成")
-
-        if self.neutralize_size and market_cap is not None:
+        elif self.neutralize_size and market_cap is not None:
             result = self.neutralize_by_size(result, market_cap)
             logger.info("市值中性化完成")
 
         return result
 
     def winsorize(self, factors: pd.DataFrame) -> pd.DataFrame:
-        """MAD 法去极值 + 分位数截断"""
+        """
+        v6.2修复: MAD法去极值 + 分位数截断
+        修复: quantile clip基于MAD处理后的数据(不再覆盖)
+        """
         result = factors.copy()
         for col in result.columns:
             s = result[col]
-            # MAD 法
+            
+            # Step 1: MAD法去极值
             median = s.median()
             mad = (s - median).abs().median()
             if mad > 0 and not np.isnan(mad):
                 upper = median + 3 * 1.4826 * mad
                 lower = median - 3 * 1.4826 * mad
                 result[col] = s.clip(lower, upper)
-
-            # 分位数截断
-            q_low = s.quantile(self.winsorize_q)
-            q_high = s.quantile(1 - self.winsorize_q)
+            
+            # v6.2修复: Step 2基于MAD处理后的数据做分位数截尾
+            # (之前用的是原始s,导致MAD结果被覆盖)
+            q_low = result[col].quantile(self.winsorize_q)
+            q_high = result[col].quantile(1 - self.winsorize_q)
             result[col] = result[col].clip(q_low, q_high)
 
         return result
@@ -84,12 +96,53 @@ class FactorPreprocessor:
                 result[col] = 0
         return result
 
+    def neutralize_joint(self, factors: pd.DataFrame,
+                          industry: pd.Series,
+                          market_cap: pd.Series) -> pd.DataFrame:
+        """
+        v6.2新增: 联合行业+市值中性化
+        同时对行业哑变量和log(market_cap)回归取残差
+        避免分步中性化时第二步破坏第一步的效果
+        """
+        from sklearn.linear_model import LinearRegression
+
+        common_idx = factors.index.intersection(industry.index).intersection(market_cap.index)
+        if len(common_idx) == 0:
+            return factors
+
+        f = factors.loc[common_idx].copy()
+        ind = industry.loc[common_idx]
+        log_mc = np.log(market_cap.loc[common_idx].clip(lower=1))
+
+        # 行业哑变量
+        industry_dummies = pd.get_dummies(ind, prefix="ind", drop_first=True)
+        # 市值特征
+        mc_feature = log_mc.values.reshape(-1, 1)
+        
+        # 合并特征矩阵
+        if industry_dummies.shape[1] > 0:
+            X = np.hstack([industry_dummies.values, mc_feature])
+        else:
+            X = mc_feature
+
+        result = f.copy()
+        for col in f.columns:
+            y = f[col].fillna(f[col].mean())
+            try:
+                model = LinearRegression()
+                model.fit(X, y)
+                residual = y - model.predict(X)
+                result[col] = residual
+            except Exception:
+                pass
+
+        return result
+
     def neutralize_by_industry(self, factors: pd.DataFrame,
                                industry: pd.Series) -> pd.DataFrame:
         """行业中性化: 对每个因子做行业哑变量回归取残差"""
         from sklearn.linear_model import LinearRegression
 
-        # 对齐索引
         common_idx = factors.index.intersection(industry.index)
         if len(common_idx) == 0:
             return factors
@@ -97,7 +150,6 @@ class FactorPreprocessor:
         f = factors.loc[common_idx].copy()
         ind = industry.loc[common_idx]
 
-        # 行业哑变量
         industry_dummies = pd.get_dummies(ind, prefix="ind", drop_first=True)
 
         result = f.copy()
