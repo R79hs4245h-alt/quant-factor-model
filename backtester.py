@@ -1,5 +1,6 @@
 """
-回测引擎: 按月调仓、组合收益计算、基准对比
+回测引擎 v6.1: 按月调仓、组合收益计算、基准对比
+v6.1新增: 交易成本(佣金+印花税+滑点)、涨跌停限制、ML合成器集成、市场状态自适应
 """
 import pandas as pd
 import numpy as np
@@ -8,7 +9,7 @@ from tqdm import tqdm
 
 from config import (
     BACKTEST_START, BACKTEST_END, REBALANCE_FREQ, BENCHMARK,
-    MIN_LIST_DAYS
+    MIN_LIST_DAYS, FACTOR_COMBINE_METHOD
 )
 from utils import get_logger, get_rebalance_dates, get_trade_dates
 from data_loader import get_panel_data, get_benchmark_data, get_stock_industry
@@ -19,24 +20,86 @@ from selector import StockSelector
 
 logger = get_logger("backtest")
 
+# ============ 交易成本参数 ============
+COMMISSION_RATE = 0.0003     # 佣金费率 万3
+STAMP_TAX_RATE = 0.001       # 印花税 千1(卖出)
+SLIPPAGE_RATE = 0.002        # 滑点 0.2%
+MIN_COMMISSION = 5.0         # 最低佣金 5元
+
+
+class TransactionCostModel:
+    """交易成本模型 v6.1"""
+
+    def __init__(self,
+                 commission_rate: float = COMMISSION_RATE,
+                 stamp_tax_rate: float = STAMP_TAX_RATE,
+                 slippage: float = SLIPPAGE_RATE,
+                 min_commission: float = MIN_COMMISSION):
+        self.commission_rate = commission_rate
+        self.stamp_tax_rate = stamp_tax_rate
+        self.slippage = slippage
+        self.min_commission = min_commission
+
+    def calculate_cost(self, turnover: float, portfolio_value: float = 1e6) -> float:
+        """
+        计算交易成本(占组合价值比例)
+        :param turnover: 换手率(0-1, 单边)
+        :param portfolio_value: 组合总价值
+        :return: 交易成本(绝对值)
+        """
+        traded_value = turnover * portfolio_value
+
+        # 佣金(买卖都收)
+        commission = max(traded_value * self.commission_rate, self.min_commission)
+
+        # 印花税(仅卖出)
+        stamp_tax = traded_value * 0.5 * self.stamp_tax_rate  # 换手率是双边的,卖出一半
+
+        # 滑点
+        slippage_cost = traded_value * self.slippage
+
+        return commission + stamp_tax + slippage_cost
+
+    def apply_to_returns(self, daily_return: float, turnover: float) -> float:
+        """将交易成本应用到日收益"""
+        cost_pct = turnover * (self.commission_rate + self.stamp_tax_rate * 0.5 + self.slippage)
+        return daily_return - cost_pct
+
 
 class Backtester:
-    """多因子回测引擎"""
+    """多因子回测引擎 v6.1"""
 
     def __init__(self,
                  start_date: str = BACKTEST_START,
                  end_date: str = BACKTEST_END,
                  rebalance_freq: str = REBALANCE_FREQ,
-                 benchmark: str = BENCHMARK):
+                 benchmark: str = BENCHMARK,
+                 use_ml: bool = False,
+                 use_cost_model: bool = True):
         self.start_date = start_date
         self.end_date = end_date
         self.rebalance_freq = rebalance_freq
         self.benchmark = benchmark
+        self.use_ml = use_ml
+        self.use_cost_model = use_cost_model
 
         self.factor_calc = FactorCalculator()
         self.preprocessor = FactorPreprocessor()
-        self.combiner = FactorCombiner()
+
+        # v6.1: 可选ML合成器
+        if use_ml:
+            try:
+                from ml_combiner import MLFactorCombiner
+                self.combiner = MLFactorCombiner(method="ensemble", model_type="auto")
+                logger.info("使用ML因子合成器(ensemble)")
+            except Exception as e:
+                logger.warning(f"ML合成器加载失败,退化为传统IC加权: {e}")
+                self.combiner = FactorCombiner()
+        else:
+            self.combiner = FactorCombiner()
+
         self.selector = StockSelector()
+        self.cost_model = TransactionCostModel() if use_cost_model else None
 
         # 结果存储
         self.weights_history: List[pd.Series] = []
@@ -44,6 +107,8 @@ class Backtester:
         self.portfolio_returns: Optional[pd.Series] = None
         self.benchmark_returns: Optional[pd.Series] = None
         self.holdings_history: List[Dict] = []
+        self.turnover_history: List[float] = []
+        self.cost_history: List[float] = []
 
     def run(self, panel: pd.DataFrame,
             financial: pd.DataFrame,
@@ -103,6 +168,16 @@ class Backtester:
             # 选股+风控
             weights = self.selector.select(scores, industry, prev_weights)
 
+            # v6.1: 计算换手率和交易成本
+            if prev_weights is not None and self.cost_model is not None:
+                common = weights.index.intersection(prev_weights.index)
+                turnover = float(
+                    (weights.loc[common] - prev_weights.reindex(common, fill_value=0.0)).abs().sum() / 2
+                )
+                self.turnover_history.append(turnover)
+            else:
+                self.turnover_history.append(0.0)
+
             # 记录
             self.weights_history.append(weights)
             self.rebalance_dates.append(rb_date)
@@ -110,6 +185,7 @@ class Backtester:
                 "date": rb_date,
                 "holdings": weights[weights > 0].to_dict(),
                 "n_holdings": int((weights > 0).sum()),
+                "turnover": self.turnover_history[-1],
             })
 
             prev_weights = weights
@@ -119,10 +195,19 @@ class Backtester:
             panel, rebalance_dates, trade_dates
         )
 
+        # v6.1: 应用交易成本
+        if self.cost_model is not None and self.portfolio_returns is not None:
+            self._apply_transaction_costs(rebalance_dates)
+
         # 基准收益
         self.benchmark_returns = self._compute_benchmark_returns()
 
-        logger.info("回测完成")
+        # 输出统计
+        if self.turnover_history:
+            avg_turnover = np.mean(self.turnover_history)
+            total_cost = sum(self.cost_history) if self.cost_history else 0
+            logger.info(f"回测完成 | 平均换手率: {avg_turnover:.2%} | "
+                       f"总交易成本: {total_cost:.2%}")
 
         return {
             "portfolio_returns": self.portfolio_returns,
@@ -130,7 +215,42 @@ class Backtester:
             "weights_history": self.weights_history,
             "holdings_history": self.holdings_history,
             "rebalance_dates": self.rebalance_dates,
+            "turnover_history": self.turnover_history,
+            "cost_history": self.cost_history,
         }
+
+    def _apply_transaction_costs(self, rebalance_dates: List[str]):
+        """将交易成本应用到组合收益"""
+        if self.portfolio_returns is None or self.portfolio_returns.empty:
+            return
+
+        for i, rb_date in enumerate(rebalance_dates[:-1]):
+            if i >= len(self.turnover_history):
+                break
+
+            turnover = self.turnover_history[i]
+            if turnover <= 0:
+                self.cost_history.append(0.0)
+                continue
+
+            next_rb = rebalance_dates[i + 1]
+            rb_dt = pd.to_datetime(rb_date, format="%Y%m%d")
+            next_rb_dt = pd.to_datetime(next_rb, format="%Y%m%d")
+
+            # 在调仓日扣除交易成本
+            mask = (self.portfolio_returns.index > rb_dt) & (self.portfolio_returns.index <= next_rb_dt)
+            if mask.any():
+                cost_pct = turnover * (
+                    self.cost_model.commission_rate
+                    + self.cost_model.stamp_tax_rate * 0.5
+                    + self.cost_model.slippage
+                )
+                # 在调仓后第一天扣除
+                first_day = self.portfolio_returns.index[mask][0]
+                self.portfolio_returns.loc[first_day] -= cost_pct
+                self.cost_history.append(cost_pct)
+            else:
+                self.cost_history.append(0.0)
 
     def _compute_forward_returns(self, panel: pd.DataFrame,
                                   rb_date: str, next_rb: Optional[str]) -> Optional[pd.Series]:
