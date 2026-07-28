@@ -1,0 +1,914 @@
+{
+  "report_date": "2026-07-28",
+  "capital": 100000,
+  "candidates_total": 58,
+  "kline_fetched": 38,
+  "screen_passed": 9,
+  "high_prob_count": 9,
+  "portfolio": {
+    "portfolio": [
+      {
+        "code": "510630",
+        "name": "消费ETF",
+        "asset_type": "etf",
+        "theme": "消费医药",
+        "current_price": 0.818,
+        "shares": 15900,
+        "amount": 13006.2,
+        "weight": 0.1375,
+        "profit_prob": 0.523,
+        "expected_return": 0.003,
+        "risk_score": 46.9,
+        "trend_score": 90.6,
+        "valuation_score": 27.9,
+        "screen_details": {
+          "max_drawdown": -0.0626,
+          "volatility": 0.016,
+          "var_95": 0.0182,
+          "ma_bull": true,
+          "macd_above_water": true,
+          "macd_rising": true,
+          "adx": 28.0,
+          "rsi": 60.9,
+          "ret_5d": 0.0187,
+          "ret_20d": 0.0936,
+          "price_percentile": 0.633,
+          "boll_position": 0.925
+        },
+        "predict_details": {
+          "pattern_match": {
+            "match_count": 20,
+            "profit_prob": 0.55,
+            "avg_return": 0.0039
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.483,
+            "avg_return": 0.0017,
+            "upside_90": 0.0317,
+            "downside_10": -0.0253
+          }
+        },
+        "stop_loss": 0.777,
+        "target_profit": 0.859
+      },
+      {
+        "code": "515170",
+        "name": "食品饮料ETF",
+        "asset_type": "etf",
+        "theme": "消费医药",
+        "current_price": 0.47,
+        "shares": 27700,
+        "amount": 13019.0,
+        "weight": 0.1375,
+        "profit_prob": 0.493,
+        "expected_return": 0.0042,
+        "risk_score": 48.8,
+        "trend_score": 86.3,
+        "valuation_score": 33.7,
+        "screen_details": {
+          "max_drawdown": -0.0549,
+          "volatility": 0.0165,
+          "var_95": 0.0192,
+          "ma_bull": true,
+          "macd_above_water": true,
+          "macd_rising": true,
+          "adx": 34.3,
+          "rsi": 59.1,
+          "ret_5d": 0.0043,
+          "ret_20d": 0.0805,
+          "price_percentile": 0.583,
+          "boll_position": 0.839
+        },
+        "predict_details": {
+          "pattern_match": {
+            "match_count": 18,
+            "profit_prob": 0.5,
+            "avg_return": 0.0062
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.481,
+            "avg_return": 0.0011,
+            "upside_90": 0.0309,
+            "downside_10": -0.0264
+          }
+        },
+        "stop_loss": 0.446,
+        "target_profit": 0.493
+      },
+      {
+        "code": "159707",
+        "name": "地产ETF",
+        "asset_type": "etf",
+        "theme": "金融地产",
+        "current_price": 0.469,
+        "shares": 16100,
+        "amount": 7550.9,
+        "weight": 0.0796,
+        "profit_prob": 0.475,
+        "expected_return": 0.0024,
+        "risk_score": 17.2,
+        "trend_score": 50.2,
+        "valuation_score": 43.8,
+        "screen_details": {
+          "max_drawdown": -0.089,
+          "volatility": 0.0234,
+          "var_95": 0.0348,
+          "ma_bull": true,
+          "macd_above_water": false,
+          "macd_rising": false,
+          "adx": 30.5,
+          "rsi": 53.3,
+          "ret_5d": 0.0174,
+          "ret_20d": 0.0907,
+          "price_percentile": 0.433,
+          "boll_position": 0.831
+        },
+        "predict_details": {
+          "pattern_match": {
+            "match_count": 15,
+            "profit_prob": 0.467,
+            "avg_return": 0.0051
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.489,
+            "avg_return": -0.0016,
+            "upside_90": 0.0377,
+            "downside_10": -0.0426
+          }
+        },
+        "stop_loss": 0.446,
+        "target_profit": 0.492
+      },
+      {
+        "code": "516900",
+        "name": "食品饮料ETF华安",
+        "asset_type": "etf",
+        "theme": "其他",
+        "current_price": 0.499,
+        "shares": 25700,
+        "amount": 12824.3,
+        "weight": 0.135,
+        "profit_prob": 0.472,
+        "expected_return": 0.0035,
+        "risk_score": 50.9,
+        "trend_score": 66.2,
+        "valuation_score": 34.1,
+        "screen_details": {
+          "max_drawdown": -0.0495,
+          "volatility": 0.0169,
+          "var_95": 0.0188,
+          "ma_bull": true,
+          "macd_above_water": false,
+          "macd_rising": true,
+          "adx": 33.9,
+          "rsi": 58.2,
+          "ret_5d": 0.004,
+          "ret_20d": 0.0731,
+          "price_percentile": 0.583,
+          "boll_position": 0.84
+        },
+        "predict_details": {
+          "pattern_match": {
+            "match_count": 19,
+            "profit_prob": 0.474,
+            "avg_return": 0.0054
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.47,
+            "avg_return": 0.0007,
+            "upside_90": 0.0331,
+            "downside_10": -0.0269
+          }
+        },
+        "stop_loss": 0.474,
+        "target_profit": 0.524
+      },
+      {
+        "code": "159512",
+        "name": "汽车ETF",
+        "asset_type": "etf",
+        "theme": "其他",
+        "current_price": 1.071,
+        "shares": 5300,
+        "amount": 5676.3,
+        "weight": 0.0604,
+        "profit_prob": 0.364,
+        "expected_return": -0.0047,
+        "risk_score": 16.7,
+        "trend_score": 52.5,
+        "valuation_score": 47.8,
+        "screen_details": {
+          "max_drawdown": -0.1148,
+          "volatility": 0.0204,
+          "var_95": 0.0332,
+          "ma_bull": false,
+          "macd_above_water": false,
+          "macd_rising": true,
+          "adx": 29.4,
+          "rsi": 50.2,
+          "ret_5d": 0.0249,
+          "ret_20d": 0.0338,
+          "price_percentile": 0.367,
+          "boll_position": 0.85
+        },
+        "predict_details": {
+          "pattern_match": {
+            "match_count": 13,
+            "profit_prob": 0.308,
+            "avg_return": -0.0046
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.448,
+            "avg_return": -0.0047,
+            "upside_90": 0.0295,
+            "downside_10": -0.0404
+          }
+        },
+        "stop_loss": 1.017,
+        "target_profit": 1.125
+      },
+      {
+        "code": "600809",
+        "name": "山西汾酒",
+        "asset_type": "stock",
+        "theme": "消费白酒",
+        "current_price": 126.25,
+        "shares": 100,
+        "amount": 12625.0,
+        "weight": 0.15,
+        "profit_prob": 0.579,
+        "expected_return": 0.009,
+        "risk_score": 7.6,
+        "trend_score": 97.8,
+        "valuation_score": 26.3,
+        "screen_details": {
+          "max_drawdown": -0.1072,
+          "volatility": 0.0284,
+          "var_95": 0.0357,
+          "ma_bull": true,
+          "macd_above_water": true,
+          "macd_rising": true,
+          "adx": 32.0,
+          "rsi": 62.5,
+          "ret_5d": 0.0426,
+          "ret_20d": 0.1543,
+          "price_percentile": 0.667,
+          "boll_position": 0.902
+        },
+        "predict_details": {
+          "pattern_match": {
+            "match_count": 16,
+            "profit_prob": 0.625,
+            "avg_return": 0.0122
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.51,
+            "avg_return": 0.0041,
+            "upside_90": 0.0562,
+            "downside_10": -0.0435
+          }
+        },
+        "stop_loss": 116.15,
+        "target_profit": 136.35
+      },
+      {
+        "code": "002594",
+        "name": "比亚迪",
+        "asset_type": "stock",
+        "theme": "新能源",
+        "current_price": 93.35,
+        "shares": 100,
+        "amount": 9335.0,
+        "weight": 0.15,
+        "profit_prob": 0.534,
+        "expected_return": 0.0018,
+        "risk_score": 15.0,
+        "trend_score": 45,
+        "valuation_score": 40.2,
+        "screen_details": {
+          "max_drawdown": -0.1276,
+          "volatility": 0.0233,
+          "var_95": 0.032,
+          "ma_bull": false,
+          "macd_above_water": true,
+          "macd_rising": false,
+          "adx": 27.1,
+          "rsi": 57.4,
+          "ret_5d": -0.0101,
+          "ret_20d": 0.1713,
+          "price_percentile": 0.533,
+          "boll_position": 0.729
+        },
+        "predict_details": {
+          "pattern_match": {
+            "match_count": 22,
+            "profit_prob": 0.545,
+            "avg_return": 0.0012
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.516,
+            "avg_return": 0.0027,
+            "upside_90": 0.0463,
+            "downside_10": -0.0401
+          }
+        },
+        "stop_loss": 85.882,
+        "target_profit": 100.818
+      },
+      {
+        "code": "601012",
+        "name": "隆基绿能",
+        "asset_type": "stock",
+        "theme": "新能源",
+        "current_price": 12.68,
+        "shares": 1100,
+        "amount": 13948.0,
+        "weight": 0.15,
+        "profit_prob": 0.43,
+        "expected_return": -0.0052,
+        "risk_score": 8.9,
+        "trend_score": 65,
+        "valuation_score": 50.9,
+        "screen_details": {
+          "max_drawdown": -0.1256,
+          "volatility": 0.0241,
+          "var_95": 0.0392,
+          "ma_bull": true,
+          "macd_above_water": false,
+          "macd_rising": true,
+          "adx": 14.3,
+          "rsi": 52.0,
+          "ret_5d": 0.0629,
+          "ret_20d": -0.0335,
+          "price_percentile": 0.35,
+          "boll_position": 0.748
+        },
+        "predict_details": {
+          "pattern_match": {
+            "match_count": 27,
+            "profit_prob": 0.407,
+            "avg_return": -0.0066
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.464,
+            "avg_return": -0.0031,
+            "upside_90": 0.0396,
+            "downside_10": -0.0473
+          }
+        },
+        "stop_loss": 11.666,
+        "target_profit": 13.694
+      }
+    ],
+    "total_invested": 87984.7,
+    "cash_reserve": 12015.3,
+    "portfolio_profit_prob": 0.495,
+    "portfolio_expected_return": 0.0022,
+    "portfolio_risk": 0.729,
+    "allocation_summary": {
+      "etf_ratio": 0.592,
+      "stock_ratio": 0.408,
+      "theme_allocation": {
+        "消费医药": 0.296,
+        "金融地产": 0.086,
+        "其他": 0.21,
+        "消费白酒": 0.143,
+        "新能源": 0.265
+      },
+      "n_holdings": 8,
+      "max_position": 0.15
+    }
+  },
+  "market_analysis": {
+    "status": "偏弱",
+    "breadth": 0.395,
+    "avg_change": -0.0162,
+    "up_count": 15,
+    "down_count": 23,
+    "total_observed": 38
+  },
+  "all_candidates": [
+    {
+      "code": "600809",
+      "name": "山西汾酒",
+      "asset_type": "stock",
+      "theme": "消费白酒",
+      "current_price": 126.25,
+      "profit_prob": 0.579,
+      "expected_return": 0.009,
+      "upside": 0.0562,
+      "downside": -0.0435,
+      "confidence": "低",
+      "risk_score": 7.6,
+      "trend_score": 97.8,
+      "valuation_score": 26.3,
+      "screen_result": {
+        "pass": true,
+        "risk_score": 7.6,
+        "trend_score": 97.8,
+        "valuation_score": 26.3,
+        "details": {
+          "max_drawdown": -0.1072,
+          "volatility": 0.0284,
+          "var_95": 0.0357,
+          "ma_bull": true,
+          "macd_above_water": true,
+          "macd_rising": true,
+          "adx": 32.0,
+          "rsi": 62.5,
+          "ret_5d": 0.0426,
+          "ret_20d": 0.1543,
+          "price_percentile": 0.667,
+          "boll_position": 0.902
+        },
+        "fail_reasons": []
+      },
+      "predict_result": {
+        "profit_prob": 0.579,
+        "expected_return": 0.009,
+        "upside": 0.0562,
+        "downside": -0.0435,
+        "confidence": "低",
+        "method_details": {
+          "pattern_match": {
+            "match_count": 16,
+            "profit_prob": 0.625,
+            "avg_return": 0.0122
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.51,
+            "avg_return": 0.0041,
+            "upside_90": 0.0562,
+            "downside_10": -0.0435
+          }
+        }
+      }
+    },
+    {
+      "code": "002594",
+      "name": "比亚迪",
+      "asset_type": "stock",
+      "theme": "新能源",
+      "current_price": 93.35,
+      "profit_prob": 0.534,
+      "expected_return": 0.0018,
+      "upside": 0.0463,
+      "downside": -0.0401,
+      "confidence": "低",
+      "risk_score": 15.0,
+      "trend_score": 45,
+      "valuation_score": 40.2,
+      "screen_result": {
+        "pass": true,
+        "risk_score": 15.0,
+        "trend_score": 45,
+        "valuation_score": 40.2,
+        "details": {
+          "max_drawdown": -0.1276,
+          "volatility": 0.0233,
+          "var_95": 0.032,
+          "ma_bull": false,
+          "macd_above_water": true,
+          "macd_rising": false,
+          "adx": 27.1,
+          "rsi": 57.4,
+          "ret_5d": -0.0101,
+          "ret_20d": 0.1713,
+          "price_percentile": 0.533,
+          "boll_position": 0.729
+        },
+        "fail_reasons": []
+      },
+      "predict_result": {
+        "profit_prob": 0.534,
+        "expected_return": 0.0018,
+        "upside": 0.0463,
+        "downside": -0.0401,
+        "confidence": "低",
+        "method_details": {
+          "pattern_match": {
+            "match_count": 22,
+            "profit_prob": 0.545,
+            "avg_return": 0.0012
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.516,
+            "avg_return": 0.0027,
+            "upside_90": 0.0463,
+            "downside_10": -0.0401
+          }
+        }
+      }
+    },
+    {
+      "code": "510630",
+      "name": "消费ETF",
+      "asset_type": "etf",
+      "theme": "消费医药",
+      "current_price": 0.818,
+      "profit_prob": 0.523,
+      "expected_return": 0.003,
+      "upside": 0.0317,
+      "downside": -0.0253,
+      "confidence": "低",
+      "risk_score": 46.9,
+      "trend_score": 90.6,
+      "valuation_score": 27.9,
+      "screen_result": {
+        "pass": true,
+        "risk_score": 46.9,
+        "trend_score": 90.6,
+        "valuation_score": 27.9,
+        "details": {
+          "max_drawdown": -0.0626,
+          "volatility": 0.016,
+          "var_95": 0.0182,
+          "ma_bull": true,
+          "macd_above_water": true,
+          "macd_rising": true,
+          "adx": 28.0,
+          "rsi": 60.9,
+          "ret_5d": 0.0187,
+          "ret_20d": 0.0936,
+          "price_percentile": 0.633,
+          "boll_position": 0.925
+        },
+        "fail_reasons": []
+      },
+      "predict_result": {
+        "profit_prob": 0.523,
+        "expected_return": 0.003,
+        "upside": 0.0317,
+        "downside": -0.0253,
+        "confidence": "低",
+        "method_details": {
+          "pattern_match": {
+            "match_count": 20,
+            "profit_prob": 0.55,
+            "avg_return": 0.0039
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.483,
+            "avg_return": 0.0017,
+            "upside_90": 0.0317,
+            "downside_10": -0.0253
+          }
+        }
+      }
+    },
+    {
+      "code": "515170",
+      "name": "食品饮料ETF",
+      "asset_type": "etf",
+      "theme": "消费医药",
+      "current_price": 0.47,
+      "profit_prob": 0.493,
+      "expected_return": 0.0042,
+      "upside": 0.0309,
+      "downside": -0.0264,
+      "confidence": "低",
+      "risk_score": 48.8,
+      "trend_score": 86.3,
+      "valuation_score": 33.7,
+      "screen_result": {
+        "pass": true,
+        "risk_score": 48.8,
+        "trend_score": 86.3,
+        "valuation_score": 33.7,
+        "details": {
+          "max_drawdown": -0.0549,
+          "volatility": 0.0165,
+          "var_95": 0.0192,
+          "ma_bull": true,
+          "macd_above_water": true,
+          "macd_rising": true,
+          "adx": 34.3,
+          "rsi": 59.1,
+          "ret_5d": 0.0043,
+          "ret_20d": 0.0805,
+          "price_percentile": 0.583,
+          "boll_position": 0.839
+        },
+        "fail_reasons": []
+      },
+      "predict_result": {
+        "profit_prob": 0.493,
+        "expected_return": 0.0042,
+        "upside": 0.0309,
+        "downside": -0.0264,
+        "confidence": "低",
+        "method_details": {
+          "pattern_match": {
+            "match_count": 18,
+            "profit_prob": 0.5,
+            "avg_return": 0.0062
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.481,
+            "avg_return": 0.0011,
+            "upside_90": 0.0309,
+            "downside_10": -0.0264
+          }
+        }
+      }
+    },
+    {
+      "code": "159707",
+      "name": "地产ETF",
+      "asset_type": "etf",
+      "theme": "金融地产",
+      "current_price": 0.469,
+      "profit_prob": 0.475,
+      "expected_return": 0.0024,
+      "upside": 0.0377,
+      "downside": -0.0426,
+      "confidence": "低",
+      "risk_score": 17.2,
+      "trend_score": 50.2,
+      "valuation_score": 43.8,
+      "screen_result": {
+        "pass": true,
+        "risk_score": 17.2,
+        "trend_score": 50.2,
+        "valuation_score": 43.8,
+        "details": {
+          "max_drawdown": -0.089,
+          "volatility": 0.0234,
+          "var_95": 0.0348,
+          "ma_bull": true,
+          "macd_above_water": false,
+          "macd_rising": false,
+          "adx": 30.5,
+          "rsi": 53.3,
+          "ret_5d": 0.0174,
+          "ret_20d": 0.0907,
+          "price_percentile": 0.433,
+          "boll_position": 0.831
+        },
+        "fail_reasons": []
+      },
+      "predict_result": {
+        "profit_prob": 0.475,
+        "expected_return": 0.0024,
+        "upside": 0.0377,
+        "downside": -0.0426,
+        "confidence": "低",
+        "method_details": {
+          "pattern_match": {
+            "match_count": 15,
+            "profit_prob": 0.467,
+            "avg_return": 0.0051
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.489,
+            "avg_return": -0.0016,
+            "upside_90": 0.0377,
+            "downside_10": -0.0426
+          }
+        }
+      }
+    },
+    {
+      "code": "516900",
+      "name": "食品饮料ETF华安",
+      "asset_type": "etf",
+      "theme": "其他",
+      "current_price": 0.499,
+      "profit_prob": 0.472,
+      "expected_return": 0.0035,
+      "upside": 0.0331,
+      "downside": -0.0269,
+      "confidence": "低",
+      "risk_score": 50.9,
+      "trend_score": 66.2,
+      "valuation_score": 34.1,
+      "screen_result": {
+        "pass": true,
+        "risk_score": 50.9,
+        "trend_score": 66.2,
+        "valuation_score": 34.1,
+        "details": {
+          "max_drawdown": -0.0495,
+          "volatility": 0.0169,
+          "var_95": 0.0188,
+          "ma_bull": true,
+          "macd_above_water": false,
+          "macd_rising": true,
+          "adx": 33.9,
+          "rsi": 58.2,
+          "ret_5d": 0.004,
+          "ret_20d": 0.0731,
+          "price_percentile": 0.583,
+          "boll_position": 0.84
+        },
+        "fail_reasons": []
+      },
+      "predict_result": {
+        "profit_prob": 0.472,
+        "expected_return": 0.0035,
+        "upside": 0.0331,
+        "downside": -0.0269,
+        "confidence": "低",
+        "method_details": {
+          "pattern_match": {
+            "match_count": 19,
+            "profit_prob": 0.474,
+            "avg_return": 0.0054
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.47,
+            "avg_return": 0.0007,
+            "upside_90": 0.0331,
+            "downside_10": -0.0269
+          }
+        }
+      }
+    },
+    {
+      "code": "601012",
+      "name": "隆基绿能",
+      "asset_type": "stock",
+      "theme": "新能源",
+      "current_price": 12.68,
+      "profit_prob": 0.43,
+      "expected_return": -0.0052,
+      "upside": 0.0396,
+      "downside": -0.0473,
+      "confidence": "低",
+      "risk_score": 8.9,
+      "trend_score": 65,
+      "valuation_score": 50.9,
+      "screen_result": {
+        "pass": true,
+        "risk_score": 8.9,
+        "trend_score": 65,
+        "valuation_score": 50.9,
+        "details": {
+          "max_drawdown": -0.1256,
+          "volatility": 0.0241,
+          "var_95": 0.0392,
+          "ma_bull": true,
+          "macd_above_water": false,
+          "macd_rising": true,
+          "adx": 14.3,
+          "rsi": 52.0,
+          "ret_5d": 0.0629,
+          "ret_20d": -0.0335,
+          "price_percentile": 0.35,
+          "boll_position": 0.748
+        },
+        "fail_reasons": []
+      },
+      "predict_result": {
+        "profit_prob": 0.43,
+        "expected_return": -0.0052,
+        "upside": 0.0396,
+        "downside": -0.0473,
+        "confidence": "低",
+        "method_details": {
+          "pattern_match": {
+            "match_count": 27,
+            "profit_prob": 0.407,
+            "avg_return": -0.0066
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.464,
+            "avg_return": -0.0031,
+            "upside_90": 0.0396,
+            "downside_10": -0.0473
+          }
+        }
+      }
+    },
+    {
+      "code": "512690",
+      "name": "酒ETF",
+      "asset_type": "etf",
+      "theme": "消费医药",
+      "current_price": 0.43,
+      "profit_prob": 0.429,
+      "expected_return": 0.001,
+      "upside": 0.0392,
+      "downside": -0.0363,
+      "confidence": "低",
+      "risk_score": 29.2,
+      "trend_score": 68.5,
+      "valuation_score": 35.7,
+      "screen_result": {
+        "pass": true,
+        "risk_score": 29.2,
+        "trend_score": 68.5,
+        "valuation_score": 35.7,
+        "details": {
+          "max_drawdown": -0.0859,
+          "volatility": 0.0219,
+          "var_95": 0.0223,
+          "ma_bull": true,
+          "macd_above_water": false,
+          "macd_rising": true,
+          "adx": 34.1,
+          "rsi": 58.0,
+          "ret_5d": 0.0118,
+          "ret_20d": 0.0941,
+          "price_percentile": 0.55,
+          "boll_position": 0.842
+        },
+        "fail_reasons": []
+      },
+      "predict_result": {
+        "profit_prob": 0.429,
+        "expected_return": 0.001,
+        "upside": 0.0392,
+        "downside": -0.0363,
+        "confidence": "低",
+        "method_details": {
+          "pattern_match": {
+            "match_count": 24,
+            "profit_prob": 0.417,
+            "avg_return": 0.0012
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.449,
+            "avg_return": 0.0007,
+            "upside_90": 0.0392,
+            "downside_10": -0.0363
+          }
+        }
+      }
+    },
+    {
+      "code": "159512",
+      "name": "汽车ETF",
+      "asset_type": "etf",
+      "theme": "其他",
+      "current_price": 1.071,
+      "profit_prob": 0.364,
+      "expected_return": -0.0047,
+      "upside": 0.0295,
+      "downside": -0.0404,
+      "confidence": "低",
+      "risk_score": 16.7,
+      "trend_score": 52.5,
+      "valuation_score": 47.8,
+      "screen_result": {
+        "pass": true,
+        "risk_score": 16.7,
+        "trend_score": 52.5,
+        "valuation_score": 47.8,
+        "details": {
+          "max_drawdown": -0.1148,
+          "volatility": 0.0204,
+          "var_95": 0.0332,
+          "ma_bull": false,
+          "macd_above_water": false,
+          "macd_rising": true,
+          "adx": 29.4,
+          "rsi": 50.2,
+          "ret_5d": 0.0249,
+          "ret_20d": 0.0338,
+          "price_percentile": 0.367,
+          "boll_position": 0.85
+        },
+        "fail_reasons": []
+      },
+      "predict_result": {
+        "profit_prob": 0.364,
+        "expected_return": -0.0047,
+        "upside": 0.0295,
+        "downside": -0.0404,
+        "confidence": "低",
+        "method_details": {
+          "pattern_match": {
+            "match_count": 13,
+            "profit_prob": 0.308,
+            "avg_return": -0.0046
+          },
+          "monte_carlo": {
+            "simulations": 10000,
+            "profit_prob": 0.448,
+            "avg_return": -0.0047,
+            "upside_90": 0.0295,
+            "downside_10": -0.0404
+          }
+        }
+      }
+    }
+  ],
+  "timestamp": "2026-07-28 12:23:30"
+}

@@ -1,5 +1,5 @@
 """
-投资组合预测引擎 v7.5
+投资组合预测引擎 v7.6
 =====================
 
 核心功能:
@@ -7,14 +7,20 @@
   2. 多维度筛选: 下跌风险低 + 上涨趋势明显 + 估值合理
   3. 预测未来2日盈利概率 (历史模式匹配 + 蒙特卡洛)
   4. 10万资金组合优化 (最大化2日盈利概率 + 风险约束)
-  5. 股票+ETF混合配置 (分散化)
+  5. 股票+ETF同时投资 (龙头股+ETF混合配置)
+
+v7.6 更新:
+  - 引入真实龙头股票候选池 (25只各板块龙头)
+  - 股票和ETF差异化筛选阈值 (股票阈值适当放宽)
+  - 组合优化器确保股票和ETF同时配置 (ETF 50-70%, 股票 30-50%)
+  - 股票止损止盈更宽 (-8%/+8%), ETF更窄 (-5%/+5%)
 
 预测方法论:
-  - 趋势确认: MA5/MA10多头排列 + MACD水上 + ADX>25
-  - 下跌风险: 近30日最大回撤<8% + 波动率<3% + VaR(95%)<4%
-  - 估值安全: 价格分位<50% + 折价或平价
+  - 趋势确认: MA5/MA10多头排列 + MACD水上 + ADX>15
+  - 下跌风险: ETF回撤<12%/股票<15% + 波动率<4%/5% + VaR<5%/6%
+  - 估值安全: 价格分位<65%/70% + RSI<78/80
   - 2日盈利概率: 历史相似模式后2日上涨频率 + 蒙特卡洛模拟
-  - 组合优化: 等风险贡献 + 最大化组合盈利概率
+  - 组合优化: 分组风险平价 + ETF/股票比例约束 + 主题分散
 
 依赖: numpy, pandas, scipy(可选)
 """
@@ -50,6 +56,56 @@ except Exception:
     CORE_LOF = {}
 
 warnings.filterwarnings("ignore")
+
+
+# =====================================================================
+# 龙头股票候选池 (v7.6: 股票+基金同时投资)
+# =====================================================================
+# 从各热门板块中选取龙头股,覆盖科技/消费/金融/医药/新能源/军工等
+# 选取标准: 行业龙头 + 流动性好 + 市值适中
+LEADER_STOCKS = {
+    # 科技/半导体
+    "600519": ("贵州茅台", "消费白酒"),
+    "601318": ("中国平安", "金融地产"),
+    "600036": ("招商银行", "金融地产"),
+    "601012": ("隆基绿能", "新能源"),
+    "300750": ("宁德时代", "新能源"),
+    "002594": ("比亚迪", "新能源"),
+    "600276": ("恒瑞医药", "消费医药"),
+    "000858": ("五粮液", "消费白酒"),
+    "600887": ("伊利股份", "消费医药"),
+    "603259": ("药明康德", "消费医药"),
+    # 科技/半导体
+    "688981": ("中芯国际", "科技AI"),
+    "002475": ("立讯精密", "科技AI"),
+    "600585": ("海螺水泥", "周期制造"),
+    "601899": ("紫金矿业", "周期制造"),
+    "002241": ("歌尔股份", "科技AI"),
+    # 金融
+    "601166": ("兴业银行", "金融地产"),
+    "600000": ("浦发银行", "金融地产"),
+    "601688": ("华泰证券", "金融地产"),
+    # 消费
+    "000568": ("泸州老窖", "消费白酒"),
+    "600809": ("山西汾酒", "消费白酒"),
+    "000333": ("美的集团", "消费医药"),
+    "000651": ("格力电器", "消费医药"),
+    "603288": ("海天味业", "消费医药"),
+    # 军工
+    "600760": ("中航沈飞", "军工制造"),
+    "000768": ("中航飞机", "军工制造"),
+}
+
+# 股票主题分类
+STOCK_THEME_MAP = {
+    "科技AI": ["688981", "002475", "002241"],
+    "消费白酒": ["600519", "000858", "000568", "600809"],
+    "消费医药": ["600276", "600887", "603259", "000333", "000651", "603288"],
+    "新能源": ["601012", "300750", "002594"],
+    "金融地产": ["601318", "600036", "601166", "600000", "601688"],
+    "周期制造": ["600585", "601899"],
+    "军工制造": ["600760", "000768"],
+}
 
 
 # =====================================================================
@@ -209,20 +265,40 @@ class TechnicalIndicators:
 
 class StockScreener:
     """
-    三重筛选器:
-      1. 下跌风险低: 最大回撤<8% + 波动率<3% + VaR<4%
-      2. 上涨趋势明显: MA多头 + MACD>0 + ADX>25
-      3. 估值合理: 价格分位<50% + RSI<70
+    三重筛选器 (v7.6: 股票和ETF差异化阈值):
+      1. 下跌风险低: 最大回撤 + 波动率 + VaR
+      2. 上涨趋势明显: MA多头 + MACD>0 + ADX
+      3. 估值合理: 价格分位 + RSI
+
+    股票波动比ETF大,阈值适当放宽:
+      - 股票: 回撤<15%, 波动率<5%, VaR<6%
+      - ETF:  回撤<12%, 波动率<4%, VaR<5%
     """
 
-    # 筛选阈值
-    MAX_DRAWDOWN = 0.12       # 30日最大回撤 < 12% (放宽以适应调整市)
-    MAX_VOLATILITY = 0.04     # 日波动率 < 4%
-    MAX_VAR_95 = 0.05         # VaR(95%) < 5%
-    MIN_ADX = 15              # ADX > 15 (有初步趋势)
-    MAX_PRICE_PERCENTILE = 0.65  # 价格分位 < 65%
-    MAX_RSI = 78              # RSI < 78
-    MIN_VOLUME = 1e6          # 最小日成交额
+    # ETF筛选阈值
+    ETF_MAX_DRAWDOWN = 0.12       # ETF: 30日最大回撤 < 12%
+    ETF_MAX_VOLATILITY = 0.04     # ETF: 日波动率 < 4%
+    ETF_MAX_VAR_95 = 0.05         # ETF: VaR(95%) < 5%
+    ETF_MIN_ADX = 15              # ETF: ADX > 15
+    ETF_MAX_PRICE_PERCENTILE = 0.65  # ETF: 价格分位 < 65%
+    ETF_MAX_RSI = 78              # ETF: RSI < 78
+
+    # 股票筛选阈值 (放宽,因为个股波动更大)
+    STOCK_MAX_DRAWDOWN = 0.15     # 股票: 30日最大回撤 < 15%
+    STOCK_MAX_VOLATILITY = 0.05   # 股票: 日波动率 < 5%
+    STOCK_MAX_VAR_95 = 0.06       # 股票: VaR(95%) < 6%
+    STOCK_MIN_ADX = 15            # 股票: ADX > 15
+    STOCK_MAX_PRICE_PERCENTILE = 0.70  # 股票: 价格分位 < 70%
+    STOCK_MAX_RSI = 80            # 股票: RSI < 80
+
+    # 兼容旧代码
+    MAX_DRAWDOWN = 0.12
+    MAX_VOLATILITY = 0.04
+    MAX_VAR_95 = 0.05
+    MIN_ADX = 15
+    MAX_PRICE_PERCENTILE = 0.65
+    MAX_RSI = 78
+    MIN_VOLUME = 1e6
 
     @staticmethod
     def calc_max_drawdown(close: pd.Series) -> float:
@@ -248,9 +324,12 @@ class StockScreener:
         return float((close < current).sum() / len(close))
 
     @classmethod
-    def screen(cls, code: str, ohlc: pd.DataFrame, name: str = '') -> Dict[str, Any]:
+    def screen(cls, code: str, ohlc: pd.DataFrame, name: str = '', asset_type: str = 'etf') -> Dict[str, Any]:
         """
-        执行三重筛选
+        执行三重筛选 (v7.6: 根据asset_type使用差异化阈值)
+
+        参数:
+          asset_type: 'etf' 或 'stock',决定使用哪套阈值
 
         返回:
           {
@@ -275,6 +354,22 @@ class StockScreener:
             result['fail_reasons'].append('数据不足(<20日)')
             return result
 
+        # v7.6: 根据资产类型选择阈值
+        if asset_type == 'stock':
+            max_dd_limit = cls.STOCK_MAX_DRAWDOWN
+            vol_limit = cls.STOCK_MAX_VOLATILITY
+            var_limit = cls.STOCK_MAX_VAR_95
+            adx_limit = cls.STOCK_MIN_ADX
+            pct_limit = cls.STOCK_MAX_PRICE_PERCENTILE
+            rsi_limit = cls.STOCK_MAX_RSI
+        else:
+            max_dd_limit = cls.ETF_MAX_DRAWDOWN
+            vol_limit = cls.ETF_MAX_VOLATILITY
+            var_limit = cls.ETF_MAX_VAR_95
+            adx_limit = cls.ETF_MIN_ADX
+            pct_limit = cls.ETF_MAX_PRICE_PERCENTILE
+            rsi_limit = cls.ETF_MAX_RSI
+
         close = ohlc['close']
         high = ohlc['high']
         low = ohlc['low']
@@ -298,14 +393,14 @@ class StockScreener:
         result['details']['volatility'] = round(vol, 4)
         result['details']['var_95'] = round(var95, 4)
 
-        risk_pass = max_dd > -cls.MAX_DRAWDOWN and vol < cls.MAX_VOLATILITY and var95 < cls.MAX_VAR_95
+        risk_pass = max_dd > -max_dd_limit and vol < vol_limit and var95 < var_limit
 
         if not risk_pass:
-            if abs(max_dd) >= cls.MAX_DRAWDOWN:
+            if abs(max_dd) >= max_dd_limit:
                 result['fail_reasons'].append(f'回撤过大({max_dd:.1%})')
-            if vol >= cls.MAX_VOLATILITY:
+            if vol >= vol_limit:
                 result['fail_reasons'].append(f'波动过高({vol:.2%})')
-            if var95 >= cls.MAX_VAR_95:
+            if var95 >= var_limit:
                 result['fail_reasons'].append(f'VaR过高({var95:.2%})')
 
         # ===== 2. 上涨趋势评估 =====
@@ -320,7 +415,7 @@ class StockScreener:
         macd_above_water = bool(dif.iloc[-1] > 0 and dea.iloc[-1] > 0)
         macd_golden = bool(hist.iloc[-1] > 0 and hist.iloc[-2] <= 0)  # 今日金叉
         macd_rising = bool(hist.iloc[-1] > hist.iloc[-2])  # 红柱增长
-        adx_strong = bool(adx.iloc[-1] > cls.MIN_ADX)
+        adx_strong = bool(adx.iloc[-1] > adx_limit)
         price_above_ma5 = bool(current_price > ma5.iloc[-1])
 
         # 5日涨幅
@@ -376,15 +471,15 @@ class StockScreener:
 
         valuation_score = pct_score * 0.4 + rsi_score * 0.3 + boll_score * 0.3
 
-        val_pass = price_pct < cls.MAX_PRICE_PERCENTILE and rsi_val < cls.MAX_RSI
+        val_pass = price_pct < pct_limit and rsi_val < rsi_limit
 
         result['details']['price_percentile'] = round(price_pct, 3)
         result['details']['boll_position'] = round(boll_pos, 3)
 
         if not val_pass:
-            if price_pct >= cls.MAX_PRICE_PERCENTILE:
+            if price_pct >= pct_limit:
                 result['fail_reasons'].append(f'价格分位偏高({price_pct:.0%})')
-            if rsi_val >= cls.MAX_RSI:
+            if rsi_val >= rsi_limit:
                 result['fail_reasons'].append(f'RSI超买({rsi_val:.0f})')
 
         # ===== 综合判断 =====
@@ -592,7 +687,7 @@ class ProfitPredictor:
 
 class PortfolioOptimizer:
     """
-    投资组合优化器
+    投资组合优化器 (v7.6: 股票+基金同时投资)
 
     目标: 最大化组合2日盈利概率
     约束:
@@ -600,8 +695,9 @@ class PortfolioOptimizer:
       - 单只标的最大权重: 25%
       - 单只标的最小权重: 5%
       - 最多持有: 8只标的
-      - 股票+ETF混合: ETF占比>=50%
+      - 股票+ETF混合: ETF占50-70%, 股票占30-50%
       - 行业分散: 单一主题最大占比<=35%
+      - 必须同时持有股票和ETF (如果候选池中有)
     """
 
     TOTAL_CAPITAL = 100000  # 10万
@@ -609,13 +705,16 @@ class PortfolioOptimizer:
     MIN_POSITION = 0.05     # 单只最小5%
     MAX_HOLDINGS = 8        # 最多8只
     MIN_ETF_RATIO = 0.50    # ETF最少占50%
+    MAX_ETF_RATIO = 0.70    # ETF最多占70%
+    MIN_STOCK_RATIO = 0.30  # 股票最少占30% (如果有股票候选)
+    MAX_STOCK_RATIO = 0.50  # 股票最多占50%
     MAX_THEME_RATIO = 0.35  # 单主题最大35%
     CASH_RESERVE = 0.05     # 保留5%现金
 
     @classmethod
     def optimize(cls, candidates: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        优化投资组合
+        优化投资组合 (v7.6: 股票+ETF同时配置)
 
         参数:
           candidates: 候选标的列表,每个包含:
@@ -637,84 +736,139 @@ class PortfolioOptimizer:
         if not candidates:
             return cls._empty_portfolio()
 
+        # v7.6: 分为ETF和股票两组
+        etf_cands = [c for c in candidates if c.get('asset_type') == 'etf']
+        stock_cands = [c for c in candidates if c.get('asset_type') == 'stock']
+
         # 按盈利概率排序
-        sorted_cands = sorted(candidates, key=lambda x: x.get('profit_prob', 0), reverse=True)
+        etf_cands.sort(key=lambda x: x.get('profit_prob', 0), reverse=True)
+        stock_cands.sort(key=lambda x: x.get('profit_prob', 0), reverse=True)
 
-        # 先按主题分组,确保分散化
-        theme_groups = defaultdict(list)
-        for c in sorted_cands:
-            theme_groups[c.get('theme', '其他')].append(c)
+        # 按主题分组,确保分散化
+        def diversify(cands):
+            theme_groups = defaultdict(list)
+            for c in cands:
+                theme_groups[c.get('theme', '其他')].append(c)
+            diversified = []
+            for theme, funds in theme_groups.items():
+                for f in funds[:2]:
+                    diversified.append(f)
+            diversified.sort(key=lambda x: x.get('profit_prob', 0), reverse=True)
+            return diversified
 
-        # 从每个主题中选最优的1-2只
-        diversified = []
-        for theme, funds in theme_groups.items():
-            # 取该主题前2只
-            for f in funds[:2]:
-                diversified.append(f)
+        etf_diversified = diversify(etf_cands)
+        stock_diversified = diversify(stock_cands)
 
-        # 再按盈利概率排序
-        diversified.sort(key=lambda x: x.get('profit_prob', 0), reverse=True)
+        # v7.6: 确定ETF和股票的持仓数量
+        # 目标: ETF占4-6只, 股票占2-4只, 总共最多8只
+        if stock_diversified:
+            # 有股票候选: ETF最多5只, 股票最多3只
+            n_etf = min(5, len(etf_diversified))
+            n_stock = min(3, len(stock_diversified))
+            # 确保总数不超过MAX_HOLDINGS
+            while n_etf + n_stock > cls.MAX_HOLDINGS and n_etf > 2:
+                n_etf -= 1
+        else:
+            # 无股票候选: 全部ETF
+            n_etf = min(cls.MAX_HOLDINGS, len(etf_diversified))
+            n_stock = 0
 
-        # 选取最多 MAX_HOLDINGS 只
-        n_holdings = min(cls.MAX_HOLDINGS, len(diversified))
-        selected = diversified[:n_holdings]
+        selected = etf_diversified[:n_etf] + stock_diversified[:n_stock]
 
         if not selected:
             return cls._empty_portfolio()
 
-        # ===== 权重分配: 基于盈利概率的风险平价 =====
+        # v7.6: 分配ETF和股票的资金比例
         investable = cls.TOTAL_CAPITAL * (1 - cls.CASH_RESERVE)
 
-        # 计算每只标的的"吸引力分数": 盈利概率 × 风险调整
-        scores = []
-        for s in selected:
-            prob = s.get('profit_prob', 0.5)
-            risk = s.get('risk_score', 50)
-            # 吸引力 = 盈利概率 × (风险分/100) 的开方,使得低风险高概率标的获得更高权重
-            attractiveness = prob * np.sqrt(max(risk, 10) / 100)
-            scores.append(max(attractiveness, 0.01))
+        # 根据实际选中的标的数量动态调整比例
+        n_etf_actual = len(etf_diversified)
+        n_stock_actual = len(stock_diversified)
 
-        # 归一化
-        total_score = sum(scores)
-        raw_weights = [s / total_score for s in scores]
+        if n_stock_actual > 0 and n_etf_actual > 0:
+            # 同时有股票和ETF: 股票30-50%, ETF 50-70%
+            avg_stock_prob = np.mean([s.get('profit_prob', 0.5) for s in stock_diversified[:min(n_stock, n_stock_actual)]])
+            avg_etf_prob = np.mean([s.get('profit_prob', 0.5) for s in etf_diversified[:min(n_etf, n_etf_actual)]])
+            if avg_stock_prob > avg_etf_prob:
+                stock_ratio = min(cls.MAX_STOCK_RATIO, 0.45)
+            else:
+                stock_ratio = cls.MIN_STOCK_RATIO
+            etf_ratio = 1.0 - stock_ratio
+            # v7.6: 如果ETF只有1只,限制其不超过MAX_POSITION
+            if n_etf == 1:
+                etf_ratio = min(etf_ratio, cls.MAX_POSITION)
+                stock_ratio = 1.0 - etf_ratio
+            # 如果股票只有1只,限制其不超过MAX_POSITION
+            if n_stock == 1:
+                stock_ratio = min(stock_ratio, cls.MAX_POSITION)
+                etf_ratio = 1.0 - stock_ratio
+        elif n_stock_actual > 0:
+            stock_ratio = 1.0
+            etf_ratio = 0.0
+        else:
+            stock_ratio = 0.0
+            etf_ratio = 1.0
 
-        # 应用权重约束
-        weights = cls._constrain_weights(raw_weights, len(selected))
+        etf_budget = investable * etf_ratio
+        stock_budget = investable * stock_ratio
 
-        # 构建持仓
+        # ===== 权重分配: 基于盈利概率的风险平价 =====
+        # 分组分配: ETF组内分配, 股票组内分配
+        etf_selected = [s for s in selected if s.get('asset_type') == 'etf']
+        stock_selected = [s for s in selected if s.get('asset_type') == 'stock']
+
+        def calc_group_weights(group, budget):
+            """计算组内权重和金额"""
+            if not group:
+                return [], 0
+
+            scores = []
+            for s in group:
+                prob = s.get('profit_prob', 0.5)
+                risk = s.get('risk_score', 50)
+                attractiveness = prob * np.sqrt(max(risk, 10) / 100)
+                scores.append(max(attractiveness, 0.01))
+
+            total_score = sum(scores)
+            raw_weights = [s / total_score for s in scores]
+
+            # 应用权重约束
+            weights = cls._constrain_weights(raw_weights, len(group))
+
+            return weights, budget
+
+        etf_weights, etf_budget = calc_group_weights(etf_selected, etf_budget)
+        stock_weights, stock_budget = calc_group_weights(stock_selected, stock_budget)
+
+        # 合并为统一的持仓列表
         portfolio = []
-        for i, s in enumerate(selected):
-            weight = weights[i]
-            amount = investable * weight
+        for i, s in enumerate(etf_selected):
+            weight = etf_weights[i] * etf_ratio  # 全局权重
+            amount = etf_weights[i] * etf_budget
             price = s.get('current_price', 0)
             if price > 0:
-                shares = int(amount / price / 100) * 100  # 按手取整
+                shares = int(amount / price / 100) * 100
                 if shares == 0:
                     shares = 100
                 actual_amount = shares * price
             else:
                 shares = 0
                 actual_amount = 0
+            portfolio.append(cls._make_holding(s, weight, shares, actual_amount, price))
 
-            portfolio.append({
-                'code': s.get('code', ''),
-                'name': s.get('name', ''),
-                'asset_type': s.get('asset_type', 'etf'),
-                'theme': s.get('theme', ''),
-                'current_price': price,
-                'shares': shares,
-                'amount': round(actual_amount, 2),
-                'weight': round(weight, 4),
-                'profit_prob': s.get('profit_prob', 0),
-                'expected_return': s.get('expected_return', 0),
-                'risk_score': s.get('risk_score', 50),
-                'trend_score': s.get('trend_score', 50),
-                'valuation_score': s.get('valuation_score', 50),
-                'screen_details': s.get('screen_result', {}).get('details', {}),
-                'predict_details': s.get('predict_result', {}).get('method_details', {}),
-                'stop_loss': round(price * 0.93, 3),  # -7%止损
-                'target_profit': round(price * 1.05, 3),  # +5%止盈
-            })
+        for i, s in enumerate(stock_selected):
+            weight = stock_weights[i] * stock_ratio
+            amount = stock_weights[i] * stock_budget
+            price = s.get('current_price', 0)
+            if price > 0:
+                shares = int(amount / price / 100) * 100
+                if shares == 0:
+                    shares = 100
+                actual_amount = shares * price
+            else:
+                shares = 0
+                actual_amount = 0
+            portfolio.append(cls._make_holding(s, weight, shares, actual_amount, price))
 
         total_invested = sum(p['amount'] for p in portfolio)
 
@@ -746,6 +900,38 @@ class PortfolioOptimizer:
                 'n_holdings': len(portfolio),
                 'max_position': max(p['weight'] for p in portfolio) if portfolio else 0,
             },
+        }
+
+    @classmethod
+    def _make_holding(cls, s: Dict, weight: float, shares: int, actual_amount: float, price: float) -> Dict:
+        """构建单个持仓字典 (v7.6: 股票止损止盈更宽)"""
+        asset_type = s.get('asset_type', 'etf')
+        # 股票止损-8%,止盈+8%; ETF止损-5%,止盈+5%
+        if asset_type == 'stock':
+            stop_loss_pct = 0.92
+            target_pct = 1.08
+        else:
+            stop_loss_pct = 0.95
+            target_pct = 1.05
+
+        return {
+            'code': s.get('code', ''),
+            'name': s.get('name', ''),
+            'asset_type': asset_type,
+            'theme': s.get('theme', ''),
+            'current_price': price,
+            'shares': shares,
+            'amount': round(actual_amount, 2),
+            'weight': round(weight, 4),
+            'profit_prob': s.get('profit_prob', 0),
+            'expected_return': s.get('expected_return', 0),
+            'risk_score': s.get('risk_score', 50),
+            'trend_score': s.get('trend_score', 50),
+            'valuation_score': s.get('valuation_score', 50),
+            'screen_details': s.get('screen_result', {}).get('details', {}),
+            'predict_details': s.get('predict_result', {}).get('method_details', {}),
+            'stop_loss': round(price * stop_loss_pct, 3),
+            'target_profit': round(price * target_pct, 3),
         }
 
     @classmethod
@@ -844,14 +1030,15 @@ class PortfolioPredictor:
         self.stock_candidates = codes
 
     def set_default_candidates(self):
-        """设置默认候选池: 核心ETF + 主题ETF"""
+        """设置默认候选池 (v7.6: ETF + 龙头股票)"""
+        # ETF候选池: 核心宽基ETF + 主题ETF
         all_etf_codes = list(set(
             list(CORE_BROAD_ETF.keys()) + list(THEME_ETF.keys())
         ))
         self.etf_candidates = all_etf_codes
 
-        # 股票候选: 从ETF成分中选取龙头 (简化版,用ETF代替)
-        self.stock_candidates = []  # v7.5: 暂不选个股,聚焦ETF
+        # v7.6: 股票候选池 — 各板块龙头股
+        self.stock_candidates = list(LEADER_STOCKS.keys())
 
     def run(self) -> Dict[str, Any]:
         """
@@ -891,7 +1078,7 @@ class PortfolioPredictor:
             asset_type = 'stock' if code in self.stock_candidates else 'etf'
             name = self._get_name(code)
 
-            screen = self.screener.screen(code, ohlc, name)
+            screen = self.screener.screen(code, ohlc, name, asset_type=asset_type)
             self.screen_results[code] = screen
 
             if screen['pass']:
@@ -935,8 +1122,8 @@ class PortfolioPredictor:
 
         logger.info(f"高概率候选(>={self.predictor.MIN_PROFIT_PROB:.0%}): {len(self.candidates)} 只")
 
-        # Fallback: 如果高概率候选不足3只,从筛选通过的标的中补充
-        if len(self.candidates) < 3:
+        # Fallback: 如果高概率候选不足5只,从筛选通过的标的中补充
+        if len(self.candidates) < 5:
             logger.info("高概率候选不足,从筛选通过的标的中补充...")
             existing_codes = {c['code'] for c in self.candidates}
             for code in passed_codes:
@@ -996,7 +1183,9 @@ class PortfolioPredictor:
         return result
 
     def _get_name(self, code: str) -> str:
-        """获取标的名称"""
+        """获取标的名称 (v7.6: 支持股票)"""
+        if code in LEADER_STOCKS:
+            return LEADER_STOCKS[code][0]
         if code in CORE_BROAD_ETF:
             return CORE_BROAD_ETF[code]
         if code in THEME_ETF:
@@ -1006,7 +1195,14 @@ class PortfolioPredictor:
         return code
 
     def _get_theme(self, code: str) -> str:
-        """获取主题分类"""
+        """获取主题分类 (v7.6: 支持股票)"""
+        # 先查股票主题
+        if code in LEADER_STOCKS:
+            return LEADER_STOCKS[code][1]
+        for theme, codes in STOCK_THEME_MAP.items():
+            if code in codes:
+                return theme
+        # 再查ETF主题
         for theme, codes in ETF_THEME_MAP.items():
             if code in codes:
                 return theme
